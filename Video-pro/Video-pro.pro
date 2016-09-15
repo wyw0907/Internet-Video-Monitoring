@@ -22,7 +22,8 @@ HEADERS += \
     include/curl/mprintf.h \
     include/curl/multi.h \
     include/curl/stdcheaders.h \
-    include/curl/typecheck-gcc.h
+    include/curl/typecheck-gcc.h \
+    include/config.h
 
 DISTFILES += \
     Makefile \
