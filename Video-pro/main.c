@@ -1,11 +1,22 @@
-#include <stdio.h>
+
 #include <getopt.h>
-#include "config.h"
+#include "include/config.h"
 #include <mysql/mysql.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <opencv/cv.h>
+#include <opencv/highgui.h>
+#include <fcntl.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 #define SQLUSER      ""
 #define SQLPASSWD    ""
 #define DATABASE  ""
+
+_global V_global;
 
 static void help(char *arg)
 {
@@ -16,27 +27,41 @@ static void help(char *arg)
     printf("arqument: -r/-reset         reset this video\n");
     printf("arqument: -h/-help          print help message\n");
     printf("arqument: -p/-people + \"\" add a new people into group\n");
+    printf("arqument: -l/-local         use off-line mode\n");
     printf("----------------------------------------------\n");
     printf("\n");
     printf("\n");
     return;
 }
-static void sql_connect(char *opt)
+static int sql_connect(char *opt)
 {
     MYSQL *conn = mysql_init(NULL);
     char value = 1;
     mysql_options(conn, MYSQL_OPT_RECONNECT, (char *)&value);
     //连接数据库
-    if (!mysql_real_connect(conn,opt,SQLUSER,SQLPASSWD,DATABASE, 0, NULL, 0))
+    if(! mysql_real_connect(conn,opt,SQLUSER,SQLPASSWD,DATABASE, 0, NULL, 0))
     {
-        perror(conn);
-        exit(1);
+        LOG("connect mysql")
+        return -1;
     }
+    return 0;
 }
+
+
 
 
 int main(int argc,char **argv)
 {
+    int sql_ret;
+    int http_ret;
+    V_global.mode = ONLINE;
+    V_global.isSet = NOTSETED;
+    V_global.PicFd = -1;
+    V_global.TcpFd = -1;
+    V_global.UdpFd = -1;
+    V_global.ConnectFd = -1;
+
+
     while(1) {
         int option_index = 0, c = 0;
         static struct option long_options[] = {
@@ -52,6 +77,8 @@ int main(int argc,char **argv)
             {"reset", no_argument, 0, 0},
             {"p", required_argument, 0, 0},
             {"people", required_argument, 0, 0},
+            {"l",no_argument,0,0},
+            {"local",no_argument,0,0},
             {0, 0, 0, 0}
         };
 
@@ -71,23 +98,22 @@ int main(int argc,char **argv)
         case 0:
         case 1:
             help(argv[0]);
-            return 0;
             break;
 
             /* v, video */
         case 2:
         case 3:
-        //    video_init();
+        //    video_init(optarg);
             break;
             /* s,sql */
         case 4:
         case 5:
-            sql_connect(optarg);
+            sql_ret = sql_connect(optarg);
             break;
             /* h,http */
         case 6:
         case 7:
-          //  http_connect(optarg);
+            http_ret = http_connect(optarg);
             break;
             /* r,reset */
         case 8:
@@ -99,8 +125,59 @@ int main(int argc,char **argv)
         case 11:
           //  add_people(optarg);
             break;
+            /* -l.-local */
+        case 12:
+        case 13:
+            V_global.mode = OFFLINE;
         }
     }
+
+
+
+    if(V_global.mode == OFFLINE){
+        off_line_process();
+        return 0;
+    }
+    if(sql_ret < 0 || http_ret < 0){
+        LOG("connect to sql or http-service error!")
+        return 1;
+    }
+
+    int maxFd = -1;
+    fd_set rdset;
+    struct timeval timeout = {5,0};
+    char rdbuf[BUFSIZE] = {0};
+    while(1)
+    {
+        memset(rdbuf,0,BUFSIZE);
+        maxFd = (V_global.TcpFd>V_global.UdpFd?V_global.TcpFd:V_global.UdpFd) + 1;
+        FD_ZERO(&rdset);
+        FD_SET(V_global.TcpFd,&rdset);
+        FD_SET(V_global.UdpFd,&rdset);
+        if(V_global.ConnectFd > 0){
+            maxFd = V_global.ConnectFd;
+            FD_SET(V_global.ConnectFd,&rdset);
+        }
+
+        select(maxFd,&rdset,NULL,NULL,&timeout);
+        if(FD_ISSET(V_global.TcpFd,&rdset))
+        {
+            if(V_global.ConnectFd != -1)
+            {
+                int fd = accept(V_global.TcpFd,NULL,NULL);
+                if(fd > 0)
+                    close(fd);
+            }
+            V_global.ConnectFd = accept(V_global.TcpFd,NULL,NULL);
+        }
+        if(FD_ISSET(V_global.UdpFd,&rdset))
+        {
+
+        }
+
+    }
+
+
     return 0;
 }
 
