@@ -20,7 +20,7 @@ void off_line_process()
 
     if(!capture)
     {
-        fprintf(stderr,"Could not initialize capturing...\n");
+        LOG("Could not initialize capturing...\n");
         return;
     }
 
@@ -29,8 +29,12 @@ void off_line_process()
     frame = cvQueryFrame(capture);
 
     CvVideoWriter *writer =cvCreateVideoWriter(filename, -1, 25, cvSize(frame->width,frame->height),1);//create writer
-
-    //  CvVideoWriter *writer = cvCreateVideoWriter("camera.avi",CV_FOURCC('D','I','V','X'),25,cvSize(frame->width,frame->height));直接指定视频格式时出错。
+    if(!writer)
+    {
+        LOG("cvCreateVideoWriter error\n");
+        return;
+    }
+//      CvVideoWriter *writer = cvCreateVideoWriter("camera.avi",CV_FOURCC('D','I','V','X'),25,cvSize(frame->width,frame->height));直接指定视频格式时出错。
 
     while(capture)
     {

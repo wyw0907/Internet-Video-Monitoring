@@ -59,7 +59,6 @@ int main(int argc,char **argv)
     V_global.PicFd = -1;
     V_global.TcpFd = -1;
     V_global.UdpFd = -1;
-    V_global.ConnectFd = -1;
 
 
     while(1) {
@@ -135,44 +134,43 @@ int main(int argc,char **argv)
 
 
     if(V_global.mode == OFFLINE){
+        if(V_global.TcpFd != -1)
+            close(V_global.TcpFd);
+        if(V_global.UdpFd != -1)
+            close(V_global.UdpFd);
         off_line_process();
         return 0;
     }
     if(sql_ret < 0 || http_ret < 0){
-        LOG("connect to sql or http-service error!")
+        LOG("connect to sql or http-service error!\n")
         return 1;
     }
 
     int maxFd = -1;
+    maxFd = (V_global.TcpFd>V_global.UdpFd?V_global.TcpFd:V_global.UdpFd) + 1;
     fd_set rdset;
     struct timeval timeout = {5,0};
     char rdbuf[BUFSIZE] = {0};
     while(1)
     {
         memset(rdbuf,0,BUFSIZE);
-        maxFd = (V_global.TcpFd>V_global.UdpFd?V_global.TcpFd:V_global.UdpFd) + 1;
         FD_ZERO(&rdset);
         FD_SET(V_global.TcpFd,&rdset);
         FD_SET(V_global.UdpFd,&rdset);
-        if(V_global.ConnectFd > 0){
-            maxFd = V_global.ConnectFd;
-            FD_SET(V_global.ConnectFd,&rdset);
-        }
+//        if(V_global.ConnectFd > 0){
+//            maxFd = V_global.ConnectFd;
+//            FD_SET(V_global.ConnectFd,&rdset);
+//        }
 
         select(maxFd,&rdset,NULL,NULL,&timeout);
         if(FD_ISSET(V_global.TcpFd,&rdset))
         {
-            if(V_global.ConnectFd != -1)
-            {
-                int fd = accept(V_global.TcpFd,NULL,NULL);
-                if(fd > 0)
-                    close(fd);
-            }
-            V_global.ConnectFd = accept(V_global.TcpFd,NULL,NULL);
+
         }
         if(FD_ISSET(V_global.UdpFd,&rdset))
         {
-
+            if(recvfrom(V_global.UdpFd,rdbuf,BUFSIZE,0,NULL,NULL) > 0)
+                data_deal_handle(rdbuf);
         }
 
     }

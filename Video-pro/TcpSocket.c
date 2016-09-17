@@ -40,13 +40,13 @@ int geteth0_ip(char *ipaddr)
 
 int http_connect(char* opt)
 {
-    int ret;
-    char serverip[32];
-    ret = geteth0_ip(serverip);
-    if(ret < 0){
-        LOG("get eth0 ip error!\n")
-        return ret;
-    }
+ //   int ret;
+  //  char serverip[32];
+//    ret = geteth0_ip(serverip);
+//    if(ret < 0){
+//        LOG("get eth0 ip error!\n")
+//        return ret;
+//    }
 
 
     V_global.UdpFd = socket(AF_INET,SOCK_DGRAM,0);
@@ -62,22 +62,28 @@ int http_connect(char* opt)
         LOG("socket error\n")
         return V_global.TcpFd;
     }
-    struct sockaddr_in server_addr;
-    memset(&server_addr,0,sizeof(struct sockaddr_in));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVERPORT);
-    inet_aton(serverip,&server_addr.sin_addr);
+//    struct sockaddr_in server_addr;
+//    memset(&server_addr,0,sizeof(struct sockaddr_in));
+//    server_addr.sin_family = AF_INET;
+//    server_addr.sin_port = htons(SERVERPORT);
+//    inet_aton(serverip,&server_addr.sin_addr);
 
-    ret = bind(V_global.TcpFd,(struct sockaddr *)&server_addr,sizeof(server_addr));
-    if(ret < 0){
-        LOG("bind tcpfd error\n")
-        return ret;
-    }
-    ret = listen(V_global.TcpFd,5);
-    if(ret < 0){
-        LOG("listen tcpfd error\n")
-        return ret;
-    }
-    printf("tcpsocket start listen ...");
-    return 0;
+//    ret = bind(V_global.TcpFd,(struct sockaddr *)&server_addr,sizeof(server_addr));
+//    if(ret < 0){
+//        LOG("bind tcpfd error\n")
+//        return ret;
+//    }
+//    ret = listen(V_global.TcpFd,5);
+//    if(ret < 0){
+//        LOG("listen tcpfd error\n")
+//        return ret;
+//    }
+//    printf("tcpsocket start listen ...");
+      return 0;
 }
+
+int data_deal_handle(char *data)
+{
+    ;
+}
+

@@ -35,7 +35,7 @@ typedef struct {
     int    isSet;      //用于表现摄像头是否已经绑定用户
     int    TcpFd;
     int    UdpFd;
-    int    ConnectFd;
+//    int    ConnectFd;
     int    PicFd;
 
 }_global;
