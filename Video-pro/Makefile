@@ -12,7 +12,7 @@ INCLUDE=$(PWD)
 LIBDIR=$(PWD)/library
 all:
 	$(CC) $(FLAG) $(SRC) -o $(TARGET) -lm -lxml2 -lpthread -lmysqlclient \
-	 `pkg-config --cflags --libs opencv` -L$(LIBDIR)  -I$(INCLUDE)
+         `pkg-config --cflags --libs opencv` -L$(LIBDIR) -I$(INCLUDE)
 
 clean:
 	rm $(OBJ) $(TARGET) -fr

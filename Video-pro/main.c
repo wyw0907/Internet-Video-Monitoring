@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <signal.h>
 
 #define SQLUSER      ""
 #define SQLPASSWD    ""
@@ -47,19 +48,40 @@ static int sql_connect(char *opt)
     return 0;
 }
 
+void sigint_handle(int sig)
+{
 
+    pthread_cancel(V_global.getvideo);
+
+    pthread_cancel(V_global.sendvideo);
+
+    pthread_cancel(V_global.dealvideo);
+    pthread_mutex_destroy(&V_global.mutex);
+    pthread_cond_destroy(&V_global.cond);
+    if(V_global.TcpFd!=-1)
+        close(V_global.TcpFd);
+    if(V_global.UdpFd!=-1)
+        close(V_global.UdpFd);
+
+}
 
 
 int main(int argc,char **argv)
 {
-    int sql_ret;
-    int http_ret;
+    int sql_ret = -1;
+    int http_ret = -1;
+    int ret = -1;
     V_global.mode = ONLINE;
     V_global.isSet = NOTSETED;
-    V_global.PicFd = -1;
+
     V_global.TcpFd = -1;
     V_global.UdpFd = -1;
+    V_global.videoReq = NOREQUEST;
+    memset(V_global.VideoBuf,0,PICBUFSIZE);
 
+
+
+    signal(SIGINT,sigint_handle);
 
     while(1) {
         int option_index = 0, c = 0;
@@ -146,6 +168,31 @@ int main(int argc,char **argv)
         return 1;
     }
 
+    pthread_mutex_init(&V_global.mutex,NULL);
+    pthread_cond_init(&V_global.cond,NULL);
+    ret = pthread_create(&V_global.getvideo,NULL,getvideo_thread,NULL);
+    if(ret != 0){
+        LOG("create getvideo error!\n")
+        exit(1);
+    }
+    pthread_detach(V_global.getvideo);
+    ret = pthread_create(&V_global.sendvideo,NULL,sendvideo_thread,NULL);
+    if(ret != 0){
+        LOG("create sendvideo error!\n")
+        exit(1);
+    }
+    pthread_detach(V_global.sendvideo);
+    ret = pthread_create(&V_global.dealvideo,NULL,dealvideo_thread,NULL);
+    if(ret != 0){
+        LOG("create dealvideo error!\n")
+        exit(1);
+    }
+    pthread_detach(V_global.dealvideo);
+
+    struct sockaddr_in service;
+    socklen_t socklength;
+    memset(&service,0,sizeof(service));
+
     int maxFd = -1;
     maxFd = (V_global.TcpFd>V_global.UdpFd?V_global.TcpFd:V_global.UdpFd) + 1;
     fd_set rdset;
@@ -169,12 +216,24 @@ int main(int argc,char **argv)
         }
         if(FD_ISSET(V_global.UdpFd,&rdset))
         {
-            if(recvfrom(V_global.UdpFd,rdbuf,BUFSIZE,0,NULL,NULL) > 0)
-                data_deal_handle(rdbuf);
+            if(recvfrom(V_global.UdpFd,rdbuf,BUFSIZE,0,\
+                        (struct sockaddr *)&service,&socklength) > 0)
+                data_deal_handle(rdbuf,(struct sockaddr *)&service,socklength);
         }
 
     }
 
+    pthread_cancel(V_global.getvideo);
+
+    pthread_cancel(V_global.sendvideo);
+
+    pthread_cancel(V_global.dealvideo);
+    pthread_mutex_destroy(&V_global.mutex);
+    pthread_cond_destroy(&V_global.cond);
+    if(V_global.TcpFd!=-1)
+        close(V_global.TcpFd);
+    if(V_global.UdpFd!=-1)
+        close(V_global.UdpFd);
 
     return 0;
 }

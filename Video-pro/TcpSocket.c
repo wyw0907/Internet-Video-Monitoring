@@ -6,6 +6,19 @@
 #include <netdb.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <include/cJSON.h>
+
+const char Json_data[] = {
+  "{\"video\" : {"
+  " \"interaction\" : {"
+  " \"from\" : \"%s\","
+  " \"to\"   : \"%s\","
+  " \"cmd\"  : \"%s\","
+  " \"value\": \"%s\" "
+  "}}"
+  "}"
+};
+
 
 int geteth0_ip(char *ipaddr)
 {
@@ -82,8 +95,68 @@ int http_connect(char* opt)
       return 0;
 }
 
-int data_deal_handle(char *data)
+int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
 {
-    ;
+    int ret;
+    cJSON *cJson = cJSON_Parse(data);
+    if(!cJson){
+        LOG("cJSON error!\n")
+        goto _err;
+    }
+    cJSON *c1=NULL,*c2=NULL,*c3=NULL;
+
+    c1 = cJSON_GetObjectItem(cJson,"video");
+    if(!c1 || c1->type != cJSON_Object){
+        LOG("get video error!\n")
+        goto _err;
+    }
+
+    c2 = cJSON_GetObjectItem(c1,"interaction");
+    if(!c2 || c2->type != cJSON_Object){
+        LOG("get interaction error!\n")
+        goto _err;
+    }
+    c3 = cJSON_GetObjectItem(c2,"from");
+    if(c3 && c3->type == cJSON_String){
+        printf("from : %s\n",c3->valuestring);
+    }
+    c3 = cJSON_GetObjectItem(c2,"to");
+    if(c3 && c3->type == cJSON_String){
+        printf("to : %s\n",c3->valuestring);
+    }
+    c3 = cJSON_GetObjectItem(c2,"cmd");
+    if(c3 && c3->type == cJSON_String){
+        printf("cmd : %s\n",c3->valuestring);
+        if(strcmp(c3->valuestring,"alive") == 0)
+        {
+            ret = sendto(V_global.UdpFd,"alive",strlen("alive"),0,\
+                   (struct sockaddr *)&service,length);
+            if(ret <= 0){
+                LOG("send \"alive\" to sevice error!\n")
+            }
+        }
+        if(strcmp(c3->valuestring,"video")==0)
+        {
+            ret = connect(V_global.TcpFd,(struct sockaddr *)&service,length);
+            if(ret < 0){
+                LOG("connect service error!\n")
+            }
+            else
+                V_global.videoReq = REQUEST;
+        }
+        if(strcmp(c3->valuestring,"stop")==0)
+        {
+            V_global.videoReq = NOREQUEST;
+        }
+    }
+    c3 = cJSON_GetObjectItem(c2,"value");
+    if(c3 && c3->type == cJSON_String){
+        printf("value : %s\n",c3->valuestring);
+    }
+
+
+_err:
+    cJSON_Delete(cJson);
+    return 0;
 }
 

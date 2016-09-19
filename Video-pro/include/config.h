@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <string.h>
+#include <pthread.h>
 
 #define AVINAME         "camera.avi"
 #define PICNAME         "camera.jpg"
@@ -29,6 +30,7 @@ typedef unsigned short  u16_t;
 
 enum{NOTSETED,ISSETED};
 enum{ONLINE,OFFLINE};
+enum{NOREQUEST,REQUEST};
 typedef struct {
     int    VideoId;
     int    mode;        //离线模式或者联网,默认联网
@@ -36,8 +38,13 @@ typedef struct {
     int    TcpFd;
     int    UdpFd;
 //    int    ConnectFd;
-    int    PicFd;
-
+    int    videoReq;
+    u8_t   VideoBuf[PICBUFSIZE];
+    pthread_mutex_t     mutex;
+    pthread_cond_t      cond;
+    pthread_t   getvideo;
+    pthread_t   dealvideo;
+    pthread_t   sendvideo;
 }_global;
 
 extern _global V_global;
