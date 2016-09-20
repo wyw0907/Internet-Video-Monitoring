@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define AVINAME         "camera.avi"
 #define PICNAME         "camera.jpg"
@@ -45,6 +46,8 @@ typedef struct {
     pthread_t   getvideo;
     pthread_t   dealvideo;
     pthread_t   sendvideo;
+
+    char    group[32];
 }_global;
 
 extern _global V_global;

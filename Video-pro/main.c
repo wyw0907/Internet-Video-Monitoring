@@ -78,8 +78,10 @@ int main(int argc,char **argv)
     V_global.UdpFd = -1;
     V_global.videoReq = NOREQUEST;
     memset(V_global.VideoBuf,0,PICBUFSIZE);
+    memset(V_global.group,0,sizeof(V_global.group));
+    strcpy(V_global.group,"vedio99");
 
-
+    char add_pp[32] = {0};
 
     signal(SIGINT,sigint_handle);
 
@@ -96,10 +98,11 @@ int main(int argc,char **argv)
             {"http", required_argument, 0, 0},
             {"r", no_argument, 0, 0},
             {"reset", no_argument, 0, 0},
-            {"p", required_argument, 0, 0},
-            {"people", required_argument, 0, 0},
             {"l",no_argument,0,0},
             {"local",no_argument,0,0},
+            {"p", required_argument, 0, 0},
+            {"people", required_argument, 0, 0},
+
             {0, 0, 0, 0}
         };
 
@@ -141,15 +144,17 @@ int main(int argc,char **argv)
         case 9:
           //  video_reset();
             break;
-            /* p,people */
+
+            /* -l.-local */
         case 10:
         case 11:
-          //  add_people(optarg);
+            V_global.mode = OFFLINE;
             break;
-            /* -l.-local */
+            /* p,people */
         case 12:
         case 13:
-            V_global.mode = OFFLINE;
+            strcpy(add_pp,optarg);
+            break;
         }
     }
 
@@ -163,10 +168,20 @@ int main(int argc,char **argv)
         off_line_process();
         return 0;
     }
-    if(sql_ret < 0 || http_ret < 0){
-        LOG("connect to sql or http-service error!\n")
-        return 1;
+//    if(sql_ret < 0 || http_ret < 0){
+//        LOG("connect to sql or http-service error!\n")
+//        return 1;
+//    }
+    if(add_pp[0]!='\0'){
+        ret = add_people(add_pp);
+        if(ret != 0){
+            LOG("add people error!\n")
+            return -1;
+        }
+        else
+            LOG("add people : %s\n",add_pp);
     }
+//    return 0;
 
     pthread_mutex_init(&V_global.mutex,NULL);
     pthread_cond_init(&V_global.cond,NULL);

@@ -4,6 +4,6 @@
 void *getvideo_thread(void *);
 void *sendvideo_thread(void *);
 void *dealvideo_thread(void *);
-
+int add_people(char *);
 
 #endif
