@@ -11,7 +11,7 @@
 #define FACEURL     "apicn.faceplusplus.com/v2"
 //#define GROUPNAME   "vedio99"
 
-#define JSONBUFSIZE 1024*4
+#define JSONBUFSIZE 1024*8
 static char JsonBuf[JSONBUFSIZE] = {0};
 
 void *getvideo_thread(void *arg)
@@ -37,7 +37,7 @@ void *getvideo_thread(void *arg)
     while(1)
     {
         pthread_mutex_lock(&V_global.mutex);
-        pthread_cond_wait(&V_global.cond,&V_global.mutex);
+
 
         frame = cvQueryFrame(capture);
 
@@ -71,7 +71,7 @@ void *sendvideo_thread(void *arg)
             LOG("send vedio to service error!\n")
         }
 
-        pthread_cond_broadcast(&V_global.cond);
+
         pthread_mutex_unlock(&V_global.mutex);
     }
     pthread_exit((void *)0);
@@ -80,14 +80,90 @@ void *sendvideo_thread(void *arg)
 
 size_t read_data(void* buffer,size_t size,size_t nmemb,void *stream)
 {
- //   printf("%s\n",buffer);
+    printf("%s\n",buffer);
     memcpy(JsonBuf,buffer,size*nmemb);
     return size*nmemb;
 }
 
-int jsonparse_identify()
+int jsonparse_identify(char *name,double *confidence,char *faceid)
 {
+    if(JsonBuf[0] == '\0')
+        goto __err;
+    cJSON *cJson = cJSON_Parse(JsonBuf);
+    if(!cJson){
+        LOG("cJSON_Parse error!\n")
+        return -1;
+    }
+    cJSON *c1 = NULL,*c2 = NULL,*c3 = NULL;
+    c1 = cJSON_GetObjectItem(cJson,"face");
+    if(!c1)
+        goto __err;
+    if(c1->type != cJSON_Array)
+        goto __err;
+    int c1_size = cJSON_GetArraySize(c1);
+    int i = 0;
+ //   for(i=0;i<c1_size;i++)  这里错了，不需要遍历，只需要第一个，置信度最高的
+    {
+        c2 = cJSON_GetArrayItem(c1,i);
+        if(!c2)
+            goto __err;
+        if(c2->type != cJSON_Object)
+            goto __err;
+        c3 = cJSON_GetObjectItem(c2,"candidate");
+        if(!c3){
+            goto __err;
+        }
+        if(c3->type != cJSON_Array){
+            goto __err;
+        }
+        cJSON *c4 = NULL,*c5=NULL;
+        int c3_size = cJSON_GetArraySize(c3);
+        if(c3_size == 0){
+            LOG("identify : nomatched person!\n")
+            return 1;
+        }
+        int j = 0;
+        for(j=0;j<c3_size;j++)
+        {
+            c4 = cJSON_GetArrayItem(c3,i);
+            if(!c4)
+                goto __err;
+            if(c4->type != cJSON_Object)
+                goto __err;
+            c5 = cJSON_GetObjectItem(c4,"confidence");
+            if(!c5){
+                goto __err;
+            }
+            if(c5->type != cJSON_Number){
+               goto __err;
+            }
+    //        printf("confidencd %d : %f\n",j,c5->valuedouble);
+            *confidence = c5->valuedouble;
+
+            c5 = cJSON_GetObjectItem(c4,"person_name");
+            if(!c5){
+                goto __err;
+            }
+            if(c5->type != cJSON_String){
+                goto __err;
+            }
+  //          printf("person_name %d : %s\n",j,c5->valuestring);
+            strcpy(name,c5->valuestring);
+        }
+
+        c3 = cJSON_GetObjectItem(c2,"face_id");
+        if(!c3)
+            goto __err;
+        if(c3->type != cJSON_String)
+            goto __err;
+  //      printf("face_id : %s\n",c3->valuestring);
+        strcpy(faceid,c3->valuestring);
+    }
     return 0;
+__err:
+    LOG("face identufy error!\n")
+    cJSON_Delete(cJson);
+    return -1;
 }
 
 void *dealvideo_thread(void *arg)
@@ -96,14 +172,17 @@ void *dealvideo_thread(void *arg)
     CURLcode code;
  //   CURLFORMcode formcode;
     int timeout = 10;
+    int ret;
     struct curl_httppost *post = NULL;
     struct curl_httppost *last = NULL;
- //   struct curl_slist *headerlist = NULL;
+    char name[32] = {0};
+    char faceid[40] = {0};
+    double confidence = 0;
     while(1)
     {
-        sleep(10);
+ //       sleep(10);
         pthread_mutex_lock(&V_global.mutex);
-        pthread_cond_wait(&V_global.cond,&V_global.mutex);
+  //      pthread_cond_wait(&V_global.cond,&V_global.mutex);
         /**......****/
         if(0)
         {
@@ -117,10 +196,14 @@ void *dealvideo_thread(void *arg)
                      CURLFORM_COPYCONTENTS,APIKEY,CURLFORM_END);
         curl_formadd(&post,&last,CURLFORM_COPYNAME,"api_secret",\
                      CURLFORM_COPYCONTENTS,APISCRT,CURLFORM_END);
+     //   curl_formadd(&post,&last,CURLFORM_COPYNAME,"img",
+       //              CURLFORM_FILECONTENT,V_global.VideoBuf,CURLFORM_END);
         curl_formadd(&post,&last,CURLFORM_COPYNAME,"img",\
-                     CURLFORM_FILECONTENT,V_global.VideoBuf,CURLFORM_END);
+                     CURLFORM_FILE,"text.jpg",CURLFORM_END);
         curl_formadd(&post,&last,CURLFORM_COPYNAME,"group_name",\
                      CURLFORM_COPYCONTENTS,V_global.group,CURLFORM_END);
+        curl_formadd(&post,&last,CURLFORM_COPYNAME,"mode",\
+                     CURLFORM_COPYCONTENTS,"oneface",CURLFORM_END);
 
         curl = curl_easy_init();
         if(!curl){
@@ -132,7 +215,6 @@ void *dealvideo_thread(void *arg)
         curl_easy_setopt(curl, CURLOPT_URL,FACEURL"/recognition/identify");
         curl_easy_setopt(curl, CURLOPT_HTTPPOST, post);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-        //curl_easy_setopt(curl,CURLOPT_WRITEDATA,fptr); //这是write_data的第四个参数>值
         curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,read_data); //对返回的数据进行操作的函数地址
         curl_easy_setopt(curl,CURLOPT_WRITEDATA,NULL); //这是write_data的第四个参数值
 
@@ -140,14 +222,23 @@ void *dealvideo_thread(void *arg)
         if(code != CURLE_OK){
             LOG("curl easy perform error!\n")
         }
-        jsonparse_identify();
+        ret = jsonparse_identify(name,&confidence,faceid);
+        if(ret < 0){
+            LOG("identify error!\n")
+        }
+        else if(ret == 1)
+            LOG("indetify : nomatched person!\n")
+        else if(ret == 0){
+            LOG("identified !\n")
+            printf("%s matched %s : %f\n",faceid,name,confidence);
+        }
 
         curl_easy_cleanup(curl);
-        curl_formfree(post);
-        pthread_cond_broadcast(&V_global.cond);
+
+
         pthread_mutex_unlock(&V_global.mutex);
     }
-
+    curl_formfree(post);
     pthread_exit((void *)0);
 }
 
@@ -157,6 +248,10 @@ int jsonparse_addpeople(char *name,char *groupname,char *faceid,int flag)
     if(JsonBuf[0] == '\0')
         return -1;
     cJSON *cJson = cJSON_Parse(JsonBuf);
+    if(!cJson){
+        LOG("cJSON_parse error!\n")
+        return -1;
+    }
     cJSON *c1 = NULL,*c2 = NULL;
     switch(flag){
         case PCREATE:
@@ -246,7 +341,7 @@ int jsonparse_addpeople(char *name,char *groupname,char *faceid,int flag)
 int add_people(char *name)
 {
     int ret;
-    char faceid[3][64] = {{0},{0},{0}};
+    char faceid[3][40] = {{0},{0},{0}};
     CURL *curl = NULL;
     CURLcode code;
     int timeout = 10;
@@ -373,7 +468,7 @@ int add_people(char *name)
                  CURLFORM_COPYCONTENTS,APISCRT,CURLFORM_END);
     curl_formadd(&post,&last,CURLFORM_COPYNAME,"person_name",\
                  CURLFORM_COPYCONTENTS,name,CURLFORM_END);
-    char faceids[200] = {0};
+    char faceids[143] = {0};
     sprintf(faceids,"%s,%s,%s",faceid[0],faceid[1],faceid[2]);
     curl_formadd(&post,&last,CURLFORM_COPYNAME,"face_id",\
                  CURLFORM_COPYCONTENTS,faceids,CURLFORM_END);

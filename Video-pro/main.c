@@ -62,12 +62,13 @@ void sigint_handle(int sig)
         close(V_global.TcpFd);
     if(V_global.UdpFd!=-1)
         close(V_global.UdpFd);
-
+    exit(0);
 }
 
 
 int main(int argc,char **argv)
 {
+    V_global.VideoId = 99;
     int sql_ret = -1;
     int http_ret = -1;
     int ret = -1;
@@ -173,6 +174,7 @@ int main(int argc,char **argv)
 //        return 1;
 //    }
     if(add_pp[0]!='\0'){
+        printf("add people\n");
         ret = add_people(add_pp);
         if(ret != 0){
             LOG("add people error!\n")
@@ -185,18 +187,18 @@ int main(int argc,char **argv)
 
     pthread_mutex_init(&V_global.mutex,NULL);
     pthread_cond_init(&V_global.cond,NULL);
-    ret = pthread_create(&V_global.getvideo,NULL,getvideo_thread,NULL);
-    if(ret != 0){
-        LOG("create getvideo error!\n")
-        exit(1);
-    }
-    pthread_detach(V_global.getvideo);
-    ret = pthread_create(&V_global.sendvideo,NULL,sendvideo_thread,NULL);
-    if(ret != 0){
-        LOG("create sendvideo error!\n")
-        exit(1);
-    }
-    pthread_detach(V_global.sendvideo);
+//    ret = pthread_create(&V_global.getvideo,NULL,getvideo_thread,NULL);
+//    if(ret != 0){
+//        LOG("create getvideo error!\n")
+//        exit(1);
+//    }
+//    pthread_detach(V_global.getvideo);
+//    ret = pthread_create(&V_global.sendvideo,NULL,sendvideo_thread,NULL);
+//    if(ret != 0){
+//        LOG("create sendvideo error!\n")
+//        exit(1);
+//    }
+//    pthread_detach(V_global.sendvideo);
     ret = pthread_create(&V_global.dealvideo,NULL,dealvideo_thread,NULL);
     if(ret != 0){
         LOG("create dealvideo error!\n")
