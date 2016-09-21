@@ -3,16 +3,9 @@
 #include <opencv/highgui.h>
 #include <opencv/cv.h>
 #include "include/curl/curl.h"
-#include "include/cJSON.h"
 
-#define APIKEY      "45ffa2a9f3f88066f27e727914804e9f"
-#define APISCRT     "4K7T2MgAVl3vC72Gqv9X3QdqGw13dzmi"
-#define IMGSRC
-#define FACEURL     "apicn.faceplusplus.com/v2"
-//#define GROUPNAME   "vedio99"
 
-#define JSONBUFSIZE 1024*8
-static char JsonBuf[JSONBUFSIZE] = {0};
+char JsonBuf[JSONBUFSIZE] = {0};
 
 void *getvideo_thread(void *arg)
 {
@@ -61,8 +54,7 @@ void *sendvideo_thread(void *arg)
     int ret;
     while(1)
     {
-        if(V_global.videoReq != REQUEST )
-            continue;
+        while(V_global.videoReq != REQUEST );
         pthread_mutex_lock(&V_global.mutex);
         pthread_cond_wait(&V_global.cond,&V_global.mutex);
 
@@ -80,12 +72,14 @@ void *sendvideo_thread(void *arg)
 
 size_t read_data(void* buffer,size_t size,size_t nmemb,void *stream)
 {
+#ifdef __DEBUG
     printf("%s\n",buffer);
+#endif
     memcpy(JsonBuf,buffer,size*nmemb);
     return size*nmemb;
 }
 
-int jsonparse_identify(char *name,double *confidence,char *faceid)
+static int jsonparse_identify(char *name,double *confidence,char *faceid)
 {
     if(JsonBuf[0] == '\0')
         goto __err;
@@ -101,6 +95,8 @@ int jsonparse_identify(char *name,double *confidence,char *faceid)
     if(c1->type != cJSON_Array)
         goto __err;
     int c1_size = cJSON_GetArraySize(c1);
+    if(c1_size <= 0)
+        goto __err;
     int i = 0;
  //   for(i=0;i<c1_size;i++)  这里错了，不需要遍历，只需要第一个，置信度最高的
     {
@@ -120,6 +116,7 @@ int jsonparse_identify(char *name,double *confidence,char *faceid)
         int c3_size = cJSON_GetArraySize(c3);
         if(c3_size == 0){
             LOG("identify : nomatched person!\n")
+            cJSON_Delete(cJson);
             return 1;
         }
         int j = 0;
@@ -218,6 +215,9 @@ void *dealvideo_thread(void *arg)
         curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,read_data); //对返回的数据进行操作的函数地址
         curl_easy_setopt(curl,CURLOPT_WRITEDATA,NULL); //这是write_data的第四个参数值
 
+
+        pthread_mutex_unlock(&V_global.mutex);   //接下来是和face++的交互，所以直接把线程锁释放
+
         code = curl_easy_perform(curl);  //这里会阻塞至回调函数执行完毕或者timeout
         if(code != CURLE_OK){
             LOG("curl easy perform error!\n")
@@ -234,16 +234,12 @@ void *dealvideo_thread(void *arg)
         }
 
         curl_easy_cleanup(curl);
-
-
-        pthread_mutex_unlock(&V_global.mutex);
     }
     curl_formfree(post);
     pthread_exit((void *)0);
 }
 
-enum{PCREATE,GROUPADD,FACEADD,FACEGET,TRAIN};
-int jsonparse_addpeople(char *name,char *groupname,char *faceid,int flag)
+static int jsonparse_addpeople(char *name,char *groupname,char *faceid,int flag)
 {
     if(JsonBuf[0] == '\0')
         return -1;
@@ -263,6 +259,14 @@ int jsonparse_addpeople(char *name,char *groupname,char *faceid,int flag)
                         LOG("create person success!\n")
                         return 0;
                     }
+                }
+            }
+            c1 = cJSON_GetObjectItem(cJson,"error");
+            if(c1){
+                if(c1->type == cJSON_String){
+                    if(strcmp(c1->valuestring,"NAME_EXIT")==0)
+                        LOG("the person is cerated !\n")
+                        return 0;
                 }
             }
         }

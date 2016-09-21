@@ -1,7 +1,7 @@
 
 #include <getopt.h>
 #include "include/config.h"
-#include <mysql/mysql.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -13,9 +13,9 @@
 #include <sys/time.h>
 #include <signal.h>
 
-#define SQLUSER      ""
-#define SQLPASSWD    ""
-#define DATABASE  ""
+#define SQLUSER      "root"
+#define SQLPASSWD    "zqy19950513"
+#define DATABASE     "wyw0907"
 
 _global V_global;
 
@@ -24,27 +24,55 @@ static void help(char *arg)
     printf("---------------------------------------------\n");
     printf("arqument: -v/-video  + \"\" open    choosed video\n");
     printf("arqument: -s/-sql    + \"\" connect choosed sql\n");
-    printf("arqument: -h/-http   + \"\" connect choosed http-service\n");
+    printf("arqument: -t/-http   + \"\" connect choosed http-service\n");
     printf("arqument: -r/-reset         reset this video\n");
     printf("arqument: -h/-help          print help message\n");
     printf("arqument: -p/-people + \"\" add a new people into group\n");
     printf("arqument: -l/-local         use off-line mode\n");
     printf("----------------------------------------------\n");
     printf("\n");
+    printf("if the video has not setted:\n");
+    printf("you can use your App to scan two-dimension code to set this video\n");
+    printf("or you can use off-line mode\n");
+    printf("\n");
     printf("\n");
     return;
 }
 static int sql_connect(char *opt)
 {
-    MYSQL *conn = mysql_init(NULL);
+    if(!opt)
+        return -1;
+    V_global.conn = mysql_init(NULL);
     char value = 1;
-    mysql_options(conn, MYSQL_OPT_RECONNECT, (char *)&value);
+    mysql_options(V_global.conn, MYSQL_OPT_RECONNECT, (char *)&value);
     //连接数据库
-    if(! mysql_real_connect(conn,opt,SQLUSER,SQLPASSWD,DATABASE, 0, NULL, 0))
+    if(! mysql_real_connect(V_global.conn,opt,SQLUSER,SQLPASSWD,DATABASE, 0, NULL, 0))
     {
-        LOG("connect mysql")
+        LOG("connect mysql error!\n")
         return -1;
     }
+    MYSQL_RES *sqlres;
+    char sqlcmd[32] = {0};
+    sprintf(sqlcmd,"select name from videouser where videoid=%s",V_global.VideoId);
+    mysql_query(V_global.conn,sqlcmd);
+    sqlres = mysql_store_result(V_global.conn);
+    if(!sqlres){
+        LOG("select table error!\n")
+        return -1;
+    }
+    MYSQL_ROW sqlrow;
+    sqlrow = mysql_fetch_row(sqlres);
+    if(!sqlrow){
+        LOG("this video has not setted\n")
+   //     help(NULL);
+        exit(1);
+    }
+    char *username = (char *)sqlrow[0];
+    if(username == NULL){
+        LOG("unknown error!\n")
+        return -1;
+    }
+    LOG("welcome to use video:%s,%s\n",V_global.VideoId,username);
     return 0;
 }
 
@@ -68,13 +96,12 @@ void sigint_handle(int sig)
 
 int main(int argc,char **argv)
 {
-    V_global.VideoId = 99;
+    int reset_flag = 0;
     int sql_ret = -1;
     int http_ret = -1;
     int ret = -1;
-    V_global.mode = ONLINE;
-    V_global.isSet = NOTSETED;
-
+    memset(V_global.VideoId,0,sizeof(V_global.VideoId));
+    strcpy(V_global.VideoId,"99");
     V_global.TcpFd = -1;
     V_global.UdpFd = -1;
     V_global.videoReq = NOREQUEST;
@@ -95,7 +122,7 @@ int main(int argc,char **argv)
             {"video", required_argument, 0, 0},
             {"s", required_argument, 0, 0},
             {"sql", required_argument, 0, 0},
-            {"h", required_argument, 0, 0},
+            {"t", required_argument, 0, 0},
             {"http", required_argument, 0, 0},
             {"r", no_argument, 0, 0},
             {"reset", no_argument, 0, 0},
@@ -134,16 +161,18 @@ int main(int argc,char **argv)
         case 4:
         case 5:
             sql_ret = sql_connect(optarg);
+    //        printf("sql_ret : %d\n",sql_ret);
             break;
-            /* h,http */
+            /* t,http */
         case 6:
         case 7:
             http_ret = http_connect(optarg);
+     //       printf("http_ret : %d\n",http_ret);
             break;
             /* r,reset */
         case 8:
         case 9:
-          //  video_reset();
+            reset_flag = 1;
             break;
 
             /* -l.-local */
@@ -169,10 +198,23 @@ int main(int argc,char **argv)
         off_line_process();
         return 0;
     }
-//    if(sql_ret < 0 || http_ret < 0){
-//        LOG("connect to sql or http-service error!\n")
-//        return 1;
-//    }
+    if(sql_ret < 0 || http_ret < 0){
+        LOG("connect to sql or http-service error!\n")
+        return 1;
+    }
+    if(reset_flag == 1){
+        ret = video_reset();
+        if(ret == -1){
+            LOG("reset error!\n")
+        }
+        else
+            LOG("reset video success!\n")
+        if(V_global.TcpFd != -1)
+            close(V_global.TcpFd);
+        if(V_global.UdpFd != -1)
+            close(V_global.UdpFd);
+        return 0;
+    }
     if(add_pp[0]!='\0'){
         printf("add people\n");
         ret = add_people(add_pp);

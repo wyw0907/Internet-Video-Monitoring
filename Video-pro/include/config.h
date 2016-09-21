@@ -12,10 +12,14 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <mysql/mysql.h>
+#include "include/cJSON.h"
+#define __DEBUG   //open debug
+
 
 #define AVINAME         "camera.avi"
 #define PICNAME         "camera.jpg"
-#define SERVERPORT      9999
+
 //#define SERVERIP        "127.0.0.1"
 
 
@@ -29,13 +33,11 @@ typedef unsigned int    u32_t;
 typedef unsigned short  u16_t;
 
 
-enum{NOTSETED,ISSETED};
 enum{ONLINE,OFFLINE};
 enum{NOREQUEST,REQUEST};
 typedef struct {
-    int    VideoId;
+    char    VideoId[32];
     int    mode;        //离线模式或者联网,默认联网
-    int    isSet;      //用于表现摄像头是否已经绑定用户
     int    TcpFd;
     int    UdpFd;
 //    int    ConnectFd;
@@ -46,7 +48,7 @@ typedef struct {
     pthread_t   getvideo;
     pthread_t   dealvideo;
     pthread_t   sendvideo;
-
+    MYSQL *conn;
     char    group[32];
 }_global;
 

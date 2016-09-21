@@ -6,6 +6,7 @@
 #include <netdb.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <stdlib.h>
 #include <include/cJSON.h>
 
 const char Json_data[] = {
@@ -61,25 +62,23 @@ int http_connect(char* opt)
 //        return ret;
 //    }
 
-
+    int ret;
     V_global.UdpFd = socket(AF_INET,SOCK_DGRAM,0);
     if(V_global.UdpFd < 0){
-        LOG("socket error\n")
+        LOG("udp socket error\n")
         return V_global.UdpFd;
     }
 
-
-
     V_global.TcpFd = socket(AF_INET,SOCK_STREAM,0);
     if(V_global.TcpFd < 0){
-        LOG("socket error\n")
+        LOG("tcp socket error\n")
         return V_global.TcpFd;
     }
-//    struct sockaddr_in server_addr;
-//    memset(&server_addr,0,sizeof(struct sockaddr_in));
-//    server_addr.sin_family = AF_INET;
-//    server_addr.sin_port = htons(SERVERPORT);
-//    inet_aton(serverip,&server_addr.sin_addr);
+    struct sockaddr_in server_addr;
+    memset(&server_addr,0,sizeof(struct sockaddr_in));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(9999);
+    inet_aton(opt,&server_addr.sin_addr);
 
 //    ret = bind(V_global.TcpFd,(struct sockaddr *)&server_addr,sizeof(server_addr));
 //    if(ret < 0){
@@ -92,7 +91,20 @@ int http_connect(char* opt)
 //        return ret;
 //    }
 //    printf("tcpsocket start listen ...");
-      return 0;
+
+    ret = connect(V_global.TcpFd,(struct sockaddr *)&server_addr,sizeof(server_addr));
+    if(ret < 0){
+        LOG("connect to http-service error!\n")
+        return -1;
+    }
+    close(V_global.TcpFd);
+    V_global.TcpFd = socket(AF_INET,SOCK_STREAM,0);
+    if(V_global.TcpFd < 0){
+        LOG("tcp socket error\n")
+        return V_global.TcpFd;
+    }
+
+    return 0;
 }
 
 int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
@@ -147,6 +159,12 @@ int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
         if(strcmp(c3->valuestring,"stop")==0)
         {
             V_global.videoReq = NOREQUEST;
+            close(V_global.TcpFd);
+            V_global.TcpFd = socket(AF_INET,SOCK_STREAM,0);
+            if(V_global.TcpFd < 0){
+                LOG("tcp socket error\n")
+                exit(1);
+            }
         }
     }
     c3 = cJSON_GetObjectItem(c2,"value");
