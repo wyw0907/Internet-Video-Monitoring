@@ -219,7 +219,6 @@ int main(int argc,char **argv)
         printf("add people\n");
         ret = add_people(add_pp);
         if(ret != 0){
-            LOG("add people error!\n")
             return -1;
         }
         else

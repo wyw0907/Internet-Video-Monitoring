@@ -18,13 +18,13 @@ void *getvideo_thread(void *arg)
     if(!capture)
     {
         LOG("Could not initialize capturing...\n");
-        return;
+        exit(1);
     }
-    CvVideoWriter *writer =cvCreateVideoWriter(filename, -1, 25, cvSize(frame->width,frame->height),1);//create writer
+    CvVideoWriter *writer =cvCreateVideoWriter(filename, CV_FOURCC('D','I','V','X'), 25, cvSize(frame->width,frame->height),1);//create writer
     if(!writer)
     {
         LOG("cvCreateVideoWriter error\n");
-        return;
+        exit(1);
     }
 
     while(1)
@@ -183,7 +183,6 @@ void *dealvideo_thread(void *arg)
         /**......****/
         if(0)
         {
-            pthread_cond_broadcast(&V_global.cond);
             pthread_mutex_unlock(&V_global.mutex);
             continue;
         }
@@ -221,6 +220,7 @@ void *dealvideo_thread(void *arg)
         code = curl_easy_perform(curl);  //这里会阻塞至回调函数执行完毕或者timeout
         if(code != CURLE_OK){
             LOG("curl easy perform error!\n")
+            continue;
         }
         ret = jsonparse_identify(name,&confidence,faceid);
         if(ret < 0){
@@ -461,7 +461,9 @@ int add_people(char *name)
         }
 //        printf("111 : %d\n",i);
 //        sleep(1);
+#ifdef __DEBUG
         printf("faceid : %s\n",faceid[i]);
+#endif
     }
 
     curl_easy_cleanup(curl);

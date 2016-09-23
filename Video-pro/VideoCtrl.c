@@ -139,7 +139,7 @@ void off_line_process()
 
     frame = cvQueryFrame(capture);
 
-    CvVideoWriter *writer =cvCreateVideoWriter(filename, -1, 25, cvSize(frame->width,frame->height),1);//create writer
+    CvVideoWriter *writer =cvCreateVideoWriter(filename, CV_FOURCC('D','I','V','X'), 25, cvSize(frame->width,frame->height),1);//create writer
     if(!writer)
     {
         LOG("cvCreateVideoWriter error\n");

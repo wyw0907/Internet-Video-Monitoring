@@ -36,7 +36,7 @@ typedef unsigned short  u16_t;
 enum{ONLINE,OFFLINE};
 enum{NOREQUEST,REQUEST};
 typedef struct {
-    char    VideoId[32];
+    char   VideoId[32];
     int    mode;        //离线模式或者联网,默认联网
     int    TcpFd;
     int    UdpFd;
@@ -49,7 +49,7 @@ typedef struct {
     pthread_t   dealvideo;
     pthread_t   sendvideo;
     MYSQL *conn;
-    char    group[32];
+    char   group[32];
 }_global;
 
 extern _global V_global;

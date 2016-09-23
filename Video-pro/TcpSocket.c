@@ -11,12 +11,11 @@
 
 const char Json_data[] = {
   "{\"video\" : {"
-  " \"interaction\" : {"
   " \"from\" : \"%s\","
   " \"to\"   : \"%s\","
   " \"cmd\"  : \"%s\","
   " \"value\": \"%s\" "
-  "}}"
+  "}"
   "}"
 };
 
@@ -51,6 +50,20 @@ int geteth0_ip(char *ipaddr)
     return 0;
 }
 
+void *alive_func(void *arg)
+{
+    struct sockaddr_in addr = *((struct sockaddr_in *)arg);
+    while(1){
+        sendto(V_global.UdpFd,"alive",strlen("alive"),0,\
+               (struct sockaddr *)&addr,sizeof(addr));
+ #ifdef __DEBUG
+        sleep(5);
+ #else
+        sleep(3600);
+ #endif
+    }
+    pthread_exit((void *)0);
+}
 
 int http_connect(char* opt)
 {
@@ -78,8 +91,15 @@ int http_connect(char* opt)
     memset(&server_addr,0,sizeof(struct sockaddr_in));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(9999);
-    inet_aton(opt,&server_addr.sin_addr);
+    inet_pton(AF_INET,opt,&server_addr.sin_addr);
 
+    pthread_t tid;
+    ret = pthread_create(&tid,NULL,alive_func,(void *)server_addr);
+    if(ret != 0){
+        LOG("alive pthread create error!\n")
+        return -1;
+    }
+    pthread_detach(tid);
 //    ret = bind(V_global.TcpFd,(struct sockaddr *)&server_addr,sizeof(server_addr));
 //    if(ret < 0){
 //        LOG("bind tcpfd error\n")
@@ -92,18 +112,6 @@ int http_connect(char* opt)
 //    }
 //    printf("tcpsocket start listen ...");
 
-    ret = connect(V_global.TcpFd,(struct sockaddr *)&server_addr,sizeof(server_addr));
-    if(ret < 0){
-        LOG("connect to http-service error!\n")
-        return -1;
-    }
-    close(V_global.TcpFd);
-    V_global.TcpFd = socket(AF_INET,SOCK_STREAM,0);
-    if(V_global.TcpFd < 0){
-        LOG("tcp socket error\n")
-        return V_global.TcpFd;
-    }
-
     return 0;
 }
 
@@ -115,7 +123,7 @@ int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
         LOG("cJSON error!\n")
         goto _err;
     }
-    cJSON *c1=NULL,*c2=NULL,*c3=NULL;
+    cJSON *c1=NULL,*c3=NULL;
 
     c1 = cJSON_GetObjectItem(cJson,"video");
     if(!c1 || c1->type != cJSON_Object){
@@ -123,20 +131,20 @@ int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
         goto _err;
     }
 
-    c2 = cJSON_GetObjectItem(c1,"interaction");
-    if(!c2 || c2->type != cJSON_Object){
-        LOG("get interaction error!\n")
-        goto _err;
-    }
-    c3 = cJSON_GetObjectItem(c2,"from");
+//    c2 = cJSON_GetObjectItem(c1,"interaction");
+//    if(!c2 || c2->type != cJSON_Object){
+//        LOG("get interaction error!\n")
+//        goto _err;
+//    }
+    c3 = cJSON_GetObjectItem(c1,"from");
     if(c3 && c3->type == cJSON_String){
         printf("from : %s\n",c3->valuestring);
     }
-    c3 = cJSON_GetObjectItem(c2,"to");
+    c3 = cJSON_GetObjectItem(c1,"to");
     if(c3 && c3->type == cJSON_String){
         printf("to : %s\n",c3->valuestring);
     }
-    c3 = cJSON_GetObjectItem(c2,"cmd");
+    c3 = cJSON_GetObjectItem(c1,"cmd");
     if(c3 && c3->type == cJSON_String){
         printf("cmd : %s\n",c3->valuestring);
         if(strcmp(c3->valuestring,"alive") == 0)
@@ -152,6 +160,8 @@ int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
             ret = connect(V_global.TcpFd,(struct sockaddr *)&service,length);
             if(ret < 0){
                 LOG("connect service error!\n")
+                sendto(V_global.UdpFd,"cannot connect",strlen("cannot connect"),0,\
+                       (struct sockaddr *)&service,length);
             }
             else
                 V_global.videoReq = REQUEST;
@@ -167,7 +177,7 @@ int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
             }
         }
     }
-    c3 = cJSON_GetObjectItem(c2,"value");
+    c3 = cJSON_GetObjectItem(c1,"value");
     if(c3 && c3->type == cJSON_String){
         printf("value : %s\n",c3->valuestring);
     }
