@@ -2,13 +2,64 @@
 #include "include/config.h"
 #include <opencv/highgui.h>
 #include <opencv/cv.h>
-#include "include/curl/curl.h"
+
+#include <jpeglib.h>
 
 
 char JsonBuf[JSONBUFSIZE] = {0};
+#define BOUNDARY "boundarydonotcross"
+
+static int ipl2jpeg(IplImage *img, unsigned char **outbuffer, unsigned long*outlen)
+{
+    unsigned char *outdata = (uchar *)img->imageData;
+    struct jpeg_compress_struct cinfo = { 0 };
+    struct jpeg_error_mgr jerr;
+    JSAMPROW row_ptr[1];
+    int row_stride;
+
+    if(outbuffer == NULL)
+        return 0;
+    *outbuffer = NULL;
+    *outlen = 0;
+
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+
+
+    cinfo.image_width = img->width;
+    cinfo.image_height = img->height;
+    cinfo.input_components = img->nChannels;
+    cinfo.in_color_space = JCS_RGB;
+
+    jpeg_mem_dest(&cinfo, outbuffer, outlen);
+
+    jpeg_set_defaults(&cinfo);
+    jpeg_start_compress(&cinfo, 1);
+    row_stride = img->width * img->nChannels;
+
+
+    while (cinfo.next_scanline < cinfo.image_height)
+    {
+        row_ptr[0] = &outdata[cinfo.next_scanline * row_stride];
+        jpeg_write_scanlines(&cinfo, row_ptr, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+    jpeg_destroy_compress(&cinfo);
+
+    return 1;
+}
+
+void pthread_clean(void *arg)
+{
+    pthread_cancel(V_global.sendvideo);
+    pthread_cancel(V_global.dealvideo);
+    free(V_global.VideoBuf);
+}
 
 void *getvideo_thread(void *arg)
 {
+    pthread_cleanup_push(pthread_clean,NULL);
     char *filename = AVINAME;
     IplImage* frame = NULL;
     CvCapture* capture = NULL;
@@ -20,6 +71,8 @@ void *getvideo_thread(void *arg)
         LOG("Could not initialize capturing...\n");
         exit(1);
     }
+    frame = cvQueryFrame(capture);
+
     CvVideoWriter *writer =cvCreateVideoWriter(filename, CV_FOURCC('D','I','V','X'), 25, cvSize(frame->width,frame->height),1);//create writer
     if(!writer)
     {
@@ -31,13 +84,14 @@ void *getvideo_thread(void *arg)
     {
         pthread_mutex_lock(&V_global.mutex);
 
-
+ //       printf("got mutex in getvideo!\n");
         frame = cvQueryFrame(capture);
 
-        memcpy(V_global.VideoBuf,frame,PICBUFSIZE);
+        ipl2jpeg(frame,&V_global.VideoBuf,&V_global.piclen);
 
+   //     printf("222\n");
         cvWriteFrame(writer,frame);
-
+    //    printf("333\n");
         pthread_cond_broadcast(&V_global.cond);
         pthread_mutex_unlock(&V_global.mutex);
 
@@ -45,6 +99,8 @@ void *getvideo_thread(void *arg)
     cvReleaseCapture(&capture);
     cvReleaseVideoWriter(&writer);
     pthread_exit((void *)0);
+
+    pthread_cleanup_pop(1);
 }
 
 
@@ -52,17 +108,27 @@ void *sendvideo_thread(void *arg)
 {
 //    pthread_cleanup_pop()
     int ret;
+    char buffer[1024] = {0};
     while(1)
     {
         while(V_global.videoReq != REQUEST );
         pthread_mutex_lock(&V_global.mutex);
         pthread_cond_wait(&V_global.cond,&V_global.mutex);
 
-        ret = send(V_global.TcpFd,V_global.VideoBuf,PICBUFSIZE,0);
+        sprintf(buffer, "Content-Type: image/jpeg\r\n" \
+                "Content-Length: %08d\r\n" \
+                "X-Timestamp: %06d.%06d\r\n" \
+                "\r\n", (int)V_global.piclen, 0, 0);
+        send(V_global.TcpFd,buffer,strlen(buffer),0);
+
+        ret = send(V_global.TcpFd,V_global.VideoBuf,V_global.piclen,0);
         if(ret < 0){
             LOG("send vedio to service error!\n")
         }
 
+        sprintf(buffer, "\r\n--" BOUNDARY "\r\n");
+        if(write(V_global.TcpFd, buffer, strlen(buffer)) < 0)
+            continue;
 
         pthread_mutex_unlock(&V_global.mutex);
     }
@@ -163,8 +229,15 @@ __err:
     return -1;
 }
 
+void pthread_clean1(u8_t *buf)
+{
+    free(buf);
+    buf = NULL;
+}
+
 void *dealvideo_thread(void *arg)
 {
+
     CURL *curl = NULL;
     CURLcode code;
  //   CURLFORMcode formcode;
@@ -175,6 +248,9 @@ void *dealvideo_thread(void *arg)
     char name[32] = {0};
     char faceid[40] = {0};
     double confidence = 0;
+    u8_t *picbuf = (u8_t *)malloc(PICBUFSIZE);
+
+     pthread_cleanup_push(pthread_clean1,picbuf);
     while(1)
     {
  //       sleep(10);
@@ -186,16 +262,23 @@ void *dealvideo_thread(void *arg)
             pthread_mutex_unlock(&V_global.mutex);
             continue;
         }
-        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,0);
+
+        memcpy(picbuf,V_global.VideoBuf,V_global.piclen);
+
+        pthread_mutex_unlock(&V_global.mutex);   //接下来是和face++的交互，所以直接把线程锁释放
+
+        curl_easy_cleanup(curl);
+
+        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
 
         curl_formadd(&post,&last,CURLFORM_COPYNAME,"api_key",\
                      CURLFORM_COPYCONTENTS,APIKEY,CURLFORM_END);
         curl_formadd(&post,&last,CURLFORM_COPYNAME,"api_secret",\
                      CURLFORM_COPYCONTENTS,APISCRT,CURLFORM_END);
-     //   curl_formadd(&post,&last,CURLFORM_COPYNAME,"img",
-       //              CURLFORM_FILECONTENT,V_global.VideoBuf,CURLFORM_END);
-        curl_formadd(&post,&last,CURLFORM_COPYNAME,"img",\
-                     CURLFORM_FILE,"text.jpg",CURLFORM_END);
+        curl_formadd(&post,&last,CURLFORM_COPYNAME,"img",
+                     CURLFORM_FILECONTENT,picbuf,CURLFORM_END);
+//        curl_formadd(&post,&last,CURLFORM_COPYNAME,"img",
+//                     CURLFORM_FILE,"text.jpg",CURLFORM_END);
         curl_formadd(&post,&last,CURLFORM_COPYNAME,"group_name",\
                      CURLFORM_COPYCONTENTS,V_global.group,CURLFORM_END);
         curl_formadd(&post,&last,CURLFORM_COPYNAME,"mode",\
@@ -233,10 +316,12 @@ void *dealvideo_thread(void *arg)
             printf("%s matched %s : %f\n",faceid,name,confidence);
         }
 
-        curl_easy_cleanup(curl);
+
     }
     curl_formfree(post);
     pthread_exit((void *)0);
+
+    pthread_cleanup_pop(1);
 }
 
 static int jsonparse_addpeople(char *name,char *groupname,char *faceid,int flag)

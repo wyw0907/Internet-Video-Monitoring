@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <mysql/mysql.h>
 #include "include/cJSON.h"
+#include "include/curl/curl.h"
 #define __DEBUG   //open debug
 
 
@@ -31,6 +32,7 @@
 typedef unsigned char   u8_t;
 typedef unsigned int    u32_t;
 typedef unsigned short  u16_t;
+typedef unsigned long   ulong_t;
 
 
 enum{ONLINE,OFFLINE};
@@ -42,7 +44,8 @@ typedef struct {
     int    UdpFd;
 //    int    ConnectFd;
     int    videoReq;
-    u8_t   VideoBuf[PICBUFSIZE];
+    u8_t   *VideoBuf;
+    ulong_t piclen;
     pthread_mutex_t     mutex;
     pthread_cond_t      cond;
     pthread_t   getvideo;

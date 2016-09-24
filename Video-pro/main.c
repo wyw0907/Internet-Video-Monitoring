@@ -202,6 +202,10 @@ int main(int argc,char **argv)
         LOG("connect to sql or http-service error!\n")
         return 1;
     }
+
+
+    curl_global_init(CURL_GLOBAL_ALL);
+
     if(reset_flag == 1){
         ret = video_reset();
         if(ret == -1){
@@ -292,6 +296,8 @@ int main(int argc,char **argv)
         close(V_global.TcpFd);
     if(V_global.UdpFd!=-1)
         close(V_global.UdpFd);
+
+    curl_global_cleanup();
 
     return 0;
 }

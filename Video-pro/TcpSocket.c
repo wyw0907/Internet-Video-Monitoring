@@ -8,6 +8,7 @@
 #include <net/if.h>
 #include <stdlib.h>
 #include <include/cJSON.h>
+#include <pthread.h>
 
 const char Json_data[] = {
   "{\"video\" : {"
@@ -94,7 +95,7 @@ int http_connect(char* opt)
     inet_pton(AF_INET,opt,&server_addr.sin_addr);
 
     pthread_t tid;
-    ret = pthread_create(&tid,NULL,alive_func,(void *)server_addr);
+    ret = pthread_create(&tid,NULL,alive_func,(void *)&server_addr);
     if(ret != 0){
         LOG("alive pthread create error!\n")
         return -1;
@@ -163,8 +164,15 @@ int data_deal_handle(char *data,struct sockaddr *service,socklen_t length)
                 sendto(V_global.UdpFd,"cannot connect",strlen("cannot connect"),0,\
                        (struct sockaddr *)&service,length);
             }
-            else
+            else{
                 V_global.videoReq = REQUEST;
+                const char *header = "POST /videos/callback?video_id=%s&action=stream HTTP/1.0\r\n"
+                    "Content-Length: 0\r\n"
+                    "Content-Type: stream\r\n\r\n";
+                char buf[256];
+                sprintf(buf, header, V_global.VideoId);
+                send(V_global.TcpFd, buf, strlen(buf), 0);
+            }
         }
         if(strcmp(c3->valuestring,"stop")==0)
         {
