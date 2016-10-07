@@ -100,12 +100,13 @@ int main(int argc,char **argv)
     int sql_ret = -1;
     int http_ret = -1;
     int ret = -1;
+
     memset(V_global.VideoId,0,sizeof(V_global.VideoId));
     strcpy(V_global.VideoId,"99");
     V_global.TcpFd = -1;
     V_global.UdpFd = -1;
     V_global.videoReq = NOREQUEST;
-    memset(V_global.VideoBuf,0,PICBUFSIZE);
+   // memset(V_global.VideoBuf,0,PICBUFSIZE);
     memset(V_global.group,0,sizeof(V_global.group));
     strcpy(V_global.group,"vedio99");
 
@@ -187,8 +188,6 @@ int main(int argc,char **argv)
             break;
         }
     }
-
-
 
     if(V_global.mode == OFFLINE){
         if(V_global.TcpFd != -1)

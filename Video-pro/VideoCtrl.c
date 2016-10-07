@@ -1,7 +1,7 @@
 #include "include/config.h"
 #include <opencv/highgui.h>
 #include <opencv/cv.h>
-#include "include/curl/curl.h"
+
 
 int video_init(char *opt)
 {
